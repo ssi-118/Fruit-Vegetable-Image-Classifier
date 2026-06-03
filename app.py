@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import numpy as np
 import tensorflow as tf
 from flask import Flask, request, render_template, redirect, url_for
@@ -9,25 +10,30 @@ app = Flask(__name__)
 
 # --- Configuration ---
 # Ensure storage folders exist
-UPLOAD_FOLDER = 'static/uploads'
-MODEL_PATH = 'model/fruit_model.h5'
-LABELS_PATH = 'model/labels.txt'
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_FOLDER = BASE_DIR / 'static' / 'uploads'
+MODEL_PATH = BASE_DIR / 'model' / 'fruit_model.h5'
+LABELS_PATH = BASE_DIR / 'model' / 'labels.txt'
 
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['UPLOAD_FOLDER'] = str(UPLOAD_FOLDER)
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'webp'}
 
 # --- Load Model & Labels ---
 # We load these globally so they stay in memory for fast predictions
+model = None
+labels = []
+model_load_error = None
+
 try:
     model = tf.keras.models.load_model(MODEL_PATH)
-    with open(LABELS_PATH, 'r') as f:
+    with open(LABELS_PATH, 'r', encoding='utf-8') as f:
         labels = [line.strip() for line in f.readlines()]
     print("Model and Labels loaded successfully.")
 except Exception as e:
-    print(f"Error loading model: {e}")
+    model_load_error = str(e)
+    print(f"Error loading model: {model_load_error}")
     print("Ensure you have run train_model.py successfully first.")
 
 def allowed_file(filename):
@@ -41,6 +47,14 @@ def index():
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    if model is None or not labels:
+        return (
+            "Model is not loaded. "
+            f"Expected model at: {MODEL_PATH}. "
+            f"Expected labels at: {LABELS_PATH}. "
+            f"Load error: {model_load_error}"
+        ), 500
+
     # 1. Check if a file was uploaded
     if 'file' not in request.files:
         return redirect(request.url)
