@@ -1,0 +1,97 @@
+import os
+import numpy as np
+import tensorflow as tf
+from flask import Flask, request, render_template, redirect, url_for
+from werkzeug.utils import secure_filename
+from tensorflow.keras.preprocessing import image
+
+app = Flask(__name__)
+
+# --- Configuration ---
+# Ensure storage folders exist
+UPLOAD_FOLDER = 'static/uploads'
+MODEL_PATH = 'model/fruit_model.h5'
+LABELS_PATH = 'model/labels.txt'
+
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'webp'}
+
+# --- Load Model & Labels ---
+# We load these globally so they stay in memory for fast predictions
+try:
+    model = tf.keras.models.load_model(MODEL_PATH)
+    with open(LABELS_PATH, 'r') as f:
+        labels = [line.strip() for line in f.readlines()]
+    print("Model and Labels loaded successfully.")
+except Exception as e:
+    print(f"Error loading model: {e}")
+    print("Ensure you have run train_model.py successfully first.")
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
+# --- Routes ---
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    # 1. Check if a file was uploaded
+    if 'file' not in request.files:
+        return redirect(request.url)
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        return redirect(request.url)
+    
+    if file and allowed_file(file.filename):
+        # 2. Save the file
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+
+        try:
+            # 3. Preprocess the image
+            # We use 224x224 to match MobileNetV2 input size
+            img = image.load_img(filepath, target_size=(224, 224))
+            img_array = image.img_to_array(img)
+            
+            # MobileNetV2 expects input in range [-1, 1]
+            img_array = tf.keras.applications.mobilenet_v2.preprocess_input(img_array)
+            img_array = np.expand_dims(img_array, axis=0)
+
+            # 4. Make Prediction
+            predictions = model.predict(img_array)[0]
+            
+            # 5. Get Top-3 Results
+            # argsort gives indices of sorted values; [-3:] gets the largest 3
+            top_indices = predictions.argsort()[-3:][::-1]
+            
+            results = []
+            for i in top_indices:
+                results.append({
+                    "class": labels[i],
+                    "conf": round(float(predictions[i]) * 100, 2)
+                })
+
+            # 6. Render Result Page
+            # We pass 'img_filename' which the template uses with url_for
+            return render_template('result.html', 
+                                   results=results, 
+                                   img_filename=filename)
+        
+        except Exception as e:
+            return f"Error during processing: {str(e)}"
+    
+    else:
+        return "Invalid file type. Please upload a JPG, PNG, or WebP image."
+
+if __name__ == '__main__':
+    # Threaded=False can sometimes prevent issues with TensorFlow on some Windows machines
+    app.run(debug=True, port=5000)
