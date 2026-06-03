@@ -5,6 +5,9 @@ import tensorflow as tf
 from flask import Flask, request, render_template, redirect, url_for
 from werkzeug.utils import secure_filename
 from tensorflow.keras.preprocessing import image
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
+from tensorflow.keras.models import Model
 
 app = Flask(__name__)
 
@@ -26,10 +29,23 @@ model = None
 labels = []
 model_load_error = None
 
+def build_model(num_classes):
+    base_model = MobileNetV2(weights=None, include_top=False, input_shape=(224, 224, 3))
+    base_model.trainable = False
+
+    x = base_model.output
+    x = GlobalAveragePooling2D()(x)
+    x = Dense(512, activation='relu')(x)
+    x = Dropout(0.5)(x)
+    predictions = Dense(num_classes, activation='softmax')(x)
+
+    return Model(inputs=base_model.input, outputs=predictions)
+
 try:
-    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
     with open(LABELS_PATH, 'r', encoding='utf-8') as f:
         labels = [line.strip() for line in f.readlines()]
+    model = build_model(len(labels))
+    model.load_weights(MODEL_PATH)
     print("Model and Labels loaded successfully.")
 except Exception as e:
     model_load_error = str(e)
