@@ -27,7 +27,7 @@ labels = []
 model_load_error = None
 
 try:
-    model = tf.keras.models.load_model(MODEL_PATH)
+    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
     with open(LABELS_PATH, 'r', encoding='utf-8') as f:
         labels = [line.strip() for line in f.readlines()]
     print("Model and Labels loaded successfully.")
