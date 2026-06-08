@@ -1,13 +1,16 @@
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 from pathlib import Path
 import numpy as np
 import tensorflow as tf
 from flask import Flask, request, render_template, redirect, url_for
 from werkzeug.utils import secure_filename
 from tensorflow.keras.preprocessing import image
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
-from tensorflow.keras.models import Model
+
+# Limit TensorFlow CPU thread usage to reduce memory pressure in low-memory environments
+tf.config.threading.set_intra_op_parallelism_threads(1)
+tf.config.threading.set_inter_op_parallelism_threads(1)
 
 app = Flask(__name__)
 
@@ -29,23 +32,10 @@ model = None
 labels = []
 model_load_error = None
 
-def build_model(num_classes):
-    base_model = MobileNetV2(weights=None, include_top=False, input_shape=(224, 224, 3))
-    base_model.trainable = False
-
-    x = base_model.output
-    x = GlobalAveragePooling2D()(x)
-    x = Dense(512, activation='relu')(x)
-    x = Dropout(0.5)(x)
-    predictions = Dense(num_classes, activation='softmax')(x)
-
-    return Model(inputs=base_model.input, outputs=predictions)
-
 try:
     with open(LABELS_PATH, 'r', encoding='utf-8') as f:
         labels = [line.strip() for line in f.readlines()]
-    model = build_model(len(labels))
-    model.load_weights(MODEL_PATH)
+    model = tf.keras.models.load_model(MODEL_PATH)
     print("Model and Labels loaded successfully.")
 except Exception as e:
     model_load_error = str(e)
@@ -87,22 +77,21 @@ def predict():
         file.save(filepath)
 
         try:
+            app.logger.info(f"Processing uploaded image: {filename}")
             # 3. Preprocess the image
             # We use 224x224 to match MobileNetV2 input size
             img = image.load_img(filepath, target_size=(224, 224))
             img_array = image.img_to_array(img)
-            
+
             # MobileNetV2 expects input in range [-1, 1]
             img_array = tf.keras.applications.mobilenet_v2.preprocess_input(img_array)
             img_array = np.expand_dims(img_array, axis=0)
 
             # 4. Make Prediction
-            predictions = model.predict(img_array)[0]
-            
+            predictions = model.predict(img_array, verbose=0)[0]
+
             # 5. Get Top-3 Results
-            # argsort gives indices of sorted values; [-3:] gets the largest 3
             top_indices = predictions.argsort()[-3:][::-1]
-            
             results = []
             for i in top_indices:
                 results.append({
@@ -110,15 +99,17 @@ def predict():
                     "conf": round(float(predictions[i]) * 100, 2)
                 })
 
+            app.logger.info("Prediction completed successfully.")
+
             # 6. Render Result Page
             # We pass 'img_filename' which the template uses with url_for
-            return render_template('result.html', 
-                                   results=results, 
+            return render_template('result.html',
+                                   results=results,
                                    img_filename=filename)
-        
+
         except Exception as e:
+            app.logger.exception("Error during processing")
             return f"Error during processing: {str(e)}"
-    
     else:
         return "Invalid file type. Please upload a JPG, PNG, or WebP image."
 
