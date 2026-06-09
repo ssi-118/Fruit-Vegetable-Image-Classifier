@@ -2,5 +2,4 @@ tensorflow-cpu==2.15.0
 flask
 numpy
 pillow
-kagglehub
 gunicorn

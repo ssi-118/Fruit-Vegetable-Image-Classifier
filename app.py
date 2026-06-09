@@ -134,6 +134,4 @@ def predict():
         return "Invalid file type. Please upload a JPG, PNG, or WebP image."
 
 if __name__ == '__main__':
-    # Threaded=False can sometimes prevent issues with TensorFlow on some Windows machines
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', debug=False, port=port)
+    app.run(host='0.0.0.0', debug=False, port=7860)

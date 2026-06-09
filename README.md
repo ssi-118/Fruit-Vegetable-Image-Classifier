@@ -1,3 +1,12 @@
+---
+title: Fruit Vegetable Classifier
+emoji: 🍎
+colorFrom: green
+colorTo: yellow
+sdk: docker
+app_port: 7860
+---
+
 # Fruit & Vegetable Image Classifier
 
 A Flask web application that classifies fruit and vegetable images using a TensorFlow/Keras deep learning model.
