@@ -7,8 +7,6 @@ sdk: docker
 app_port: 7860
 ---
 
-Here is a tailored, complete `README.md` for your **Fruit & Vegetable Image Classifier** project, structured precisely like your sample and fully optimized for a Hugging Face Spaces Docker deployment.
-
 ---
 
 # Fruit & Vegetable Image Classifier
